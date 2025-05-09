@@ -1,0 +1,116 @@
+#include <iostream>  // Header for input-output operations like cout, endl, etc.
+#include <cuda_runtime.h> // CUDA-specific header that includes functions to manage memory and launch kernels on GPU
+
+// __global__ keyword indicates this is a CUDA kernel function that runs on the device (GPU)
+__global__ void matrixMul(float *A, float *B, float *C, int N) {
+    // Each thread calculates one element in the result matrix
+    // threadIdx is the index of the thread within its block (x for columns, y for rows)
+    // blockIdx is the index of the block within the grid
+    // blockDim is the size (number of threads) in one block
+
+    int row = threadIdx.y + blockIdx.y * blockDim.y; // Calculate global row index
+    int col = threadIdx.x + blockIdx.x * blockDim.x; // Calculate global column index
+
+    // Only compute if the row and column are within bounds of the matrix
+    if (row < N && col < N) {
+        float value = 0; // Variable to accumulate the sum for one element of result matrix C
+
+        // Standard matrix multiplication: multiply row of A with column of B
+        for (int k = 0; k < N; k++) {
+            value += A[row * N + k] * B[k * N + col]; 
+            // A[row][k] * B[k][col] using 1D indexing
+        }
+
+        C[row * N + col] = value; // Store the result in matrix C at position [row][col]
+    }
+}
+
+int main() {
+    int N = 3;  // Define the matrix dimension (N x N matrix)
+
+    size_t size = N * N * sizeof(float); // Total memory size in bytes for each matrix
+
+    // Declare pointers for host (CPU) matrices
+    float *A, *B, *C;
+
+    // Declare pointers for device (GPU) matrices
+    float *d_A, *d_B, *d_C;
+
+    // Allocate memory on CPU
+    A = (float*)malloc(size);  // malloc = memory allocation
+    B = (float*)malloc(size);
+    C = (float*)malloc(size);
+
+    // Allocate memory on GPU
+    cudaMalloc(&d_A, size); // Allocate space for matrix A on device (GPU)
+    cudaMalloc(&d_B, size); // Allocate space for matrix B on device
+    cudaMalloc(&d_C, size); // Allocate space for result matrix C on device
+
+    // Initialize values of matrices A and B (we're filling with some simple values for testing)
+    for (int i = 0; i < N * N; i++) {
+        A[i] = (i % N) + 1;        // Filling A with values like 1, 2, 3, 1, 2, 3,...
+        B[i] = ((i % N) + 1) * 2;  // Filling B with 2, 4, 6, 2, 4, 6,...
+    }
+
+    // Copy matrices A and B from CPU to GPU memory
+    cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice);
+
+    // Define number of threads per block (each block has 16x16 threads)
+    dim3 threadsPerBlock(16, 16);
+
+    // Calculate number of blocks needed to cover matrix of size N x N
+    dim3 blocksPerGrid((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                       (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    // Launch the kernel function on the GPU
+    matrixMul<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+
+    // Copy the result matrix C from GPU back to CPU memory
+    cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Display Matrix A
+    std::cout << "Matrix A:" << std::endl;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            std::cout << A[i * N + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // Display Matrix B
+    std::cout << "Matrix B:" << std::endl;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            std::cout << B[i * N + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // Show how the result matrix C was calculated
+    std::cout << "Calculations (C[i][j] = A[i][k] * B[k][j]):" << std::endl;
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            float value = 0;
+            for (int k = 0; k < N; k++) {
+                value += A[i * N + k] * B[k * N + j];
+            }
+            std::cout << "C[" << i << "][" << j << "] = ";
+            for (int k = 0; k < N; k++) {
+                std::cout << A[i * N + k] << "*" << B[k * N + j];
+                if (k < N - 1) std::cout << " + ";
+            }
+            std::cout << " = " << C[i * N + j] << std::endl;
+        }
+    }
+
+    // Free the allocated memory on CPU and GPU
+    free(A);
+    free(B);
+    free(C);
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_C);
+
+    return 0;
+}

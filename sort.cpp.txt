@@ -1,0 +1,244 @@
+#include <iostream>              // For input/output operations
+#include <vector>                // For dynamic array (vector) usage
+#include <chrono>                // For measuring execution time
+#include <functional>           // For using std::function to pass sorting function
+#include <omp.h>                // OpenMP header for parallelism
+
+using namespace std;
+
+// ----------------------
+// Function: Sequential Bubble Sort
+// ----------------------
+void bubbleSort(vector<int>& arr) {
+    int n = arr.size();
+
+    // Loop to access each array element
+    for (int i = 0; i < n - 1; i++) {
+        // Loop to compare array elements
+        for (int j = 0; j < n - i - 1; j++) {
+            // Compare and swap if elements are in the wrong order
+            if (arr[j] > arr[j + 1]) {
+                swap(arr[j], arr[j + 1]);  // Swapping elements
+            }
+        }
+    }
+}
+
+// ----------------------
+// Function: Parallel Bubble Sort using OpenMP
+// ----------------------
+void parallelBubbleSort(vector<int>& arr) {
+    int n = arr.size();
+
+    // Outer loop runs n-1 times
+    for (int i = 0; i < n - 1; i++) {
+
+        // Parallelize inner loop using OpenMP
+        #pragma omp parallel for shared(arr)
+        for (int j = 0; j < n - i - 1; j++) {
+            // Use critical section to avoid data race while swapping
+            if (arr[j] > arr[j + 1]) {
+                #pragma omp critical
+                {
+                    if (arr[j] > arr[j + 1]) {
+                        swap(arr[j], arr[j + 1]);  // Safe swapping
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ----------------------
+// Function: Merge - merges two sorted halves
+// ----------------------
+void merge(vector<int>& arr, int left, int mid, int right) {
+    int n1 = mid - left + 1;   // Size of left subarray
+    int n2 = right - mid;      // Size of right subarray
+
+    // Temporary arrays to store left and right halves
+    vector<int> leftArray(n1), rightArray(n2);
+
+    // Copy data to temporary arrays
+    for (int i = 0; i < n1; i++)
+        leftArray[i] = arr[left + i];
+
+    for (int j = 0; j < n2; j++)
+        rightArray[j] = arr[mid + 1 + j];
+
+    // Merge the temp arrays back into original array
+    int i = 0, j = 0, k = left;
+
+    // Merge by comparing smallest elements
+    while (i < n1 && j < n2) {
+        if (leftArray[i] <= rightArray[j])
+            arr[k++] = leftArray[i++];
+        else
+            arr[k++] = rightArray[j++];
+    }
+
+    // Copy remaining elements of leftArray
+    while (i < n1)
+        arr[k++] = leftArray[i++];
+
+    // Copy remaining elements of rightArray
+    while (j < n2)
+        arr[k++] = rightArray[j++];
+}
+
+// ----------------------
+// Function: Sequential Merge Sort
+// ----------------------
+void mergeSort(vector<int>& arr, int left, int right) {
+    if (left < right) {
+        int mid = (left + right) / 2;  // Find the midpoint
+
+        mergeSort(arr, left, mid);        // Recursively sort left half
+        mergeSort(arr, mid + 1, right);   // Recursively sort right half
+
+        merge(arr, left, mid, right);     // Merge the two halves
+    }
+}
+
+// ----------------------
+// Function: Parallel Merge Sort using OpenMP
+// ----------------------
+void parallelMergeSort(vector<int>& arr, int left, int right) {
+    if (left < right) {
+        int mid = (left + right) / 2;  // Find midpoint
+
+        // Parallelize recursive sorting using OpenMP sections
+        #pragma omp parallel sections
+        {
+            #pragma omp section
+            parallelMergeSort(arr, left, mid);  // Left half
+
+            #pragma omp section
+            parallelMergeSort(arr, mid + 1, right);  // Right half
+        }
+
+        merge(arr, left, mid, right);  // Merge the sorted halves
+    }
+}
+
+// ----------------------
+// Function: Measure execution time of sorting algorithm
+// ----------------------
+long long measureTime(function<void()> sortMethod) {
+    // Get start time
+    auto start = chrono::high_resolution_clock::now();
+
+    // Run the sorting method
+    sortMethod();
+
+    // Get end time
+    auto end = chrono::high_resolution_clock::now();
+
+    // Calculate duration in milliseconds
+    auto duration = chrono::duration_cast<chrono::milliseconds>(end - start);
+    return duration.count();
+}
+
+// ----------------------
+// Function: Print array elements
+// ----------------------
+void printArray(const vector<int>& arr) {
+    for (int num : arr)
+        cout << num << " ";
+    cout << endl;
+}
+
+// ----------------------
+// Main function - menu-driven sorting program
+// ----------------------
+int main() {
+    int choice;
+    bool continueRunning = true;
+
+    // Loop until user decides to exit
+    while (continueRunning) {
+        // Display menu
+        cout << "\nChoose an option:\n";
+        cout << "1. Sequential Bubble Sort\n";
+        cout << "2. Parallel Bubble Sort (OpenMP)\n";
+        cout << "3. Sequential Merge Sort\n";
+        cout << "4. Parallel Merge Sort (OpenMP)\n";
+        cout << "5. Exit\n";
+        cout << "Enter your choice: ";
+        cin >> choice;
+
+        // Exit condition
+        if (choice == 5) {
+            continueRunning = false;
+            cout << "Exited the program successfully" << endl;
+            break;
+        }
+
+        // Ask user for input array size
+        int size;
+        cout << "Enter the number of elements: ";
+        cin >> size;
+
+        // Declare vector to hold array elements
+        vector<int> arr(size);
+
+        // Take input for array elements
+        cout << "Enter " << size << " space-separated values of the array: ";
+        for (int i = 0; i < size; i++) {
+            cin >> arr[i];
+        }
+
+        // Perform selected sorting algorithm
+        switch (choice) {
+            case 1: {
+                cout << "\nPerforming Sequential Bubble Sort..." << endl;
+                vector<int> arrCopy = arr;  // Work on copy
+                long long time = measureTime([&]() { bubbleSort(arrCopy); });
+                cout << "Sorted Array: ";
+                printArray(arrCopy);
+                cout << "Time taken: " << time << " ms" << endl;
+                break;
+            }
+            case 2: {
+                cout << "\nPerforming Parallel Bubble Sort (OpenMP)..." << endl;
+                vector<int> arrCopy = arr;  // Work on copy
+                long long time = measureTime([&]() { parallelBubbleSort(arrCopy); });
+                cout << "Sorted Array: ";
+                printArray(arrCopy);
+                cout << "Time taken: " << time << " ms" << endl;
+                break;
+            }
+            case 3: {
+                cout << "\nPerforming Sequential Merge Sort..." << endl;
+                vector<int> arrCopy = arr;  // Work on copy
+                long long time = measureTime([&]() { mergeSort(arrCopy, 0, arrCopy.size() - 1); });
+                cout << "Sorted Array: ";
+                printArray(arrCopy);
+                cout << "Time taken: " << time << " ms" << endl;
+                break;
+            }
+            case 4: {
+                cout << "\nPerforming Parallel Merge Sort (OpenMP)..." << endl;
+                vector<int> arrCopy = arr;  // Work on copy
+                long long time = measureTime([&]() { parallelMergeSort(arrCopy, 0, arrCopy.size() - 1); });
+                cout << "Sorted Array: ";
+                printArray(arrCopy);
+                cout << "Time taken: " << time << " ms" << endl;
+                break;
+            }
+            default:
+                cout << "Invalid choice! Please try again." << endl;
+        }
+
+        // Ask if user wants to continue
+        cout << "\nDo you want to continue? (yes/no): ";
+        string userChoice;
+        cin >> userChoice;
+        if (userChoice == "no" || userChoice == "No") {
+            continueRunning = false;
+            cout << "Exited the program successfully" << endl;
+        }
+    }
+
+    return 0;
+}

@@ -1,0 +1,81 @@
+#include <iostream>     // For input and output
+#include <vector>       // To use vector (a dynamic array)
+#include <omp.h>        // To use OpenMP for parallel processing
+using namespace std;
+
+// Function to calculate the sum of elements using parallel processing
+long parallelSum(const vector<int>& arr) {
+    long sum = 0;
+
+    // Each thread adds some elements to its own local sum
+    // Finally, all thread sums are added to get total sum
+    #pragma omp parallel for reduction(+:sum)
+    for (size_t i = 0; i < arr.size(); ++i) {
+        sum += arr[i];  // Add each element to the total sum
+    }
+
+    return sum;  // Return the total sum
+}
+
+// Function to find the maximum value using parallel processing
+int parallelMax(const vector<int>& arr) {
+    int max_val = arr[0];  // Start with first element as maximum
+
+    // Each thread finds max in its part, then OpenMP picks the largest
+    #pragma omp parallel for reduction(max:max_val)
+    for (size_t i = 1; i < arr.size(); ++i) {
+        if (arr[i] > max_val) {
+            max_val = arr[i];  // Update max if current element is bigger
+        }
+    }
+
+    return max_val;  // Return the largest value found
+}
+
+// Function to find the minimum value using parallel processing
+int parallelMin(const vector<int>& arr) {
+    int min_val = arr[0];  // Start with first element as minimum
+
+    // Each thread finds min in its part, then OpenMP picks the smallest
+    #pragma omp parallel for reduction(min:min_val)
+    for (size_t i = 1; i < arr.size(); ++i) {
+        if (arr[i] < min_val) {
+            min_val = arr[i];  // Update min if current element is smaller
+        }
+    }
+
+    return min_val;  // Return the smallest value found
+}
+
+// Function to calculate average using parallel sum
+double parallelAverage(const vector<int>& arr) {
+    long sum = parallelSum(arr);  // Get the total sum
+    return static_cast<double>(sum) / arr.size();  // Divide sum by count to get average
+}
+
+int main() {
+    int n;
+    cout << "Enter the number of elements: ";
+    cin >> n;  // Take input for number of elements
+
+    vector<int> arr(n);  // Create a vector of size n
+
+    cout << "Enter the elements: ";
+    for (int i = 0; i < n; i++) {
+        cin >> arr[i];  // Take input for each element
+    }
+
+    // Use the above functions to calculate sum, max, min, and average
+    long sum = parallelSum(arr);        // Get total sum
+    int max_val = parallelMax(arr);     // Get maximum value
+    int min_val = parallelMin(arr);     // Get minimum value
+    double average = parallelAverage(arr);  // Get average
+
+    // Print the final results
+    cout << "Sum: " << sum << endl;
+    cout << "Max: " << max_val << endl;
+    cout << "Min: " << min_val << endl;
+    cout << "Average: " << average << endl;
+
+    return 0;
+}

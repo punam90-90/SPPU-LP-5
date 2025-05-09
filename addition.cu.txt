@@ -1,0 +1,98 @@
+#include <iostream>               // Includes standard input-output stream library for using cout and cin
+#include <cuda_runtime.h>        // Includes CUDA runtime library that allows us to use CUDA functions (like cudaMalloc, cudaMemcpy)
+
+// __global__ tells the compiler this function will run on the GPU and can be called from the CPU
+__global__ void vectorAdd(float *A, float *B, float *C, int N) {
+    // threadIdx.x: ID of the thread within the block (starting from 0)
+    // blockIdx.x: ID of the block within the grid
+    // blockDim.x: number of threads per block
+    // idx: unique global index for each thread (each thread processes one element)
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+    // Check if this thread's index is within the size of array
+    if (idx < N) {
+        // Perform element-wise addition: C[i] = A[i] + B[i]
+        C[idx] = A[idx] + B[idx];
+    }
+}
+
+// Main function starts here - where execution begins
+int main() {
+    int N = 10; // Number of elements in each vector (array)
+
+    // size: Total memory required for N floats (each float is 4 bytes)
+    size_t size = N * sizeof(float);
+
+    // Declare pointers for host (CPU) arrays
+    float *A, *B, *C;
+
+    // Declare pointers for device (GPU) arrays
+    float *d_A, *d_B, *d_C;
+
+    // Allocate memory on host (CPU)
+    A = (float*)malloc(size);  // Allocate memory for A
+    B = (float*)malloc(size);  // Allocate memory for B
+    C = (float*)malloc(size);  // Allocate memory for result C
+
+    // Allocate memory on device (GPU) using cudaMalloc(pointer, size)
+    cudaMalloc(&d_A, size);    // Allocate memory on GPU for A
+    cudaMalloc(&d_B, size);    // Allocate memory on GPU for B
+    cudaMalloc(&d_C, size);    // Allocate memory on GPU for C
+
+    // Initialize values for arrays A and B on CPU
+    for (int i = 0; i < N; i++) {
+        A[i] = i + 1;          // A[i] will be 1, 2, ..., 10
+        B[i] = (i + 1) * 2;    // B[i] will be 2, 4, ..., 20
+    }
+
+    // Copy data from CPU to GPU
+    // cudaMemcpy(destination, source, size, direction)
+    cudaMemcpy(d_A, A, size, cudaMemcpyHostToDevice); // Copy A to GPU
+    cudaMemcpy(d_B, B, size, cudaMemcpyHostToDevice); // Copy B to GPU
+
+    // Decide how many threads in a block
+    int threadsPerBlock = 256;  // Each block can have up to 1024 threads; here we use 256
+
+    // Decide how many blocks are needed for N elements
+    // Example: if N=1000, blocksPerGrid = (1000 + 255)/256 = 4
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+
+    // Call the kernel (GPU function) with required number of blocks and threads
+    // <<<blocks, threads>>> is CUDA syntax to launch kernel
+    vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, N);
+
+    // Copy result back from GPU to CPU memory
+    cudaMemcpy(C, d_C, size, cudaMemcpyDeviceToHost);
+
+    // Print the original vector A
+    std::cout << "Vector A: ";
+    for (int i = 0; i < N; i++) {
+        std::cout << A[i] << " "; // Print each value of A
+    }
+    std::cout << std::endl;
+
+    // Print the original vector B
+    std::cout << "Vector B: ";
+    for (int i = 0; i < N; i++) {
+        std::cout << B[i] << " "; // Print each value of B
+    }
+    std::cout << std::endl;
+
+    // Print each addition result: C[i] = A[i] + B[i]
+    std::cout << "Calculations (A[i] + B[i]):" << std::endl;
+    for (int i = 0; i < N; i++) {
+        std::cout << "C[" << i << "] = " << A[i] << " + " << B[i] << " = " << C[i] << std::endl;
+    }
+
+    // Free CPU memory that was manually allocated
+    free(A);  // Free A
+    free(B);  // Free B
+    free(C);  // Free C
+
+    // Free GPU memory
+    cudaFree(d_A);  // Free A from GPU
+    cudaFree(d_B);  // Free B from GPU
+    cudaFree(d_C);  // Free C from GPU
+
+    return 0; // Program ends
+}
